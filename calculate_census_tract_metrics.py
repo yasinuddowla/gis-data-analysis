@@ -280,8 +280,11 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
     metrics = {
         "Census Tract": tract_id,
         "Tract Area (km^2)": tract_area_km2,
+        "Total Intersections": 0,
         "Intersection Density": 0,
+        "Total Bus Stops": 0,
         "Bus-Stop Density": 0,
+        "Total Parking Lots": 0,
         "Parking-Lot/Space Density": 0,
         "Length of Interstate Highway": 0,
         "Length of State Highway": 0,
@@ -298,6 +301,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         intersection_count = count_points_within_polygon(
             infrastructure["intersections"], tract_gdf
         )
+        metrics["Total Intersections"] = intersection_count  # Store the total count
         metrics["Intersection Density"] = calculate_density(
             intersection_count, tract_area_km2
         )
@@ -306,6 +310,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         bus_stop_count = count_points_within_polygon(
             infrastructure["bus_stops"], tract_gdf
         )
+        metrics["Total Bus Stops"] = bus_stop_count  # Store the total count
         metrics["Bus-Stop Density"] = calculate_density(bus_stop_count, tract_area_km2)
 
     if "parking_lots" in infrastructure:
@@ -313,6 +318,9 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         parking_area_km2 = calculate_area_within_polygon(
             infrastructure["parking_lots"], tract_gdf
         )
+        # Count the number of parking lot features
+        parking_lot_count = len(gpd.clip(infrastructure["parking_lots"], tract_gdf))
+        metrics["Total Parking Lots"] = parking_lot_count  # Store the total count
         # Use parking area as a percentage of tract area as the density measure
         metrics["Parking-Lot/Space Density"] = (
             calculate_density(parking_area_km2, tract_area_km2) * 100
@@ -352,6 +360,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         metrics["Length of Bike Trails"] = calculate_length_within_polygon(
             infrastructure["bike_trails"], tract_gdf
         )
+
     # Calculate length of pedestrian crosswalks
     if "pedestrian_crosswalks" in infrastructure:
         metrics["Length of Pedestrian Crosswalks"] = calculate_length_within_polygon(
@@ -363,6 +372,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         metrics["Length of Sidewalks"] = calculate_length_within_polygon(
             infrastructure["sidewalks"], tract_gdf
         )
+
     return metrics
 
 
@@ -387,7 +397,7 @@ def main(tracts_file, features_dir, output_file):
 
     # Calculate metrics for each tract
     results = []
-    print(f"Calculating metrics for {len(tracts)} census tracts...")
+    print("Calculating metrics for each census tract...")
     for idx, tract in tracts.iterrows():
         try:
             # print(f"Processing tract {idx+1}/{len(tracts)}: {tract['tract_id']}")
@@ -402,8 +412,11 @@ def main(tracts_file, features_dir, output_file):
                 "Tract Area (km^2)": (
                     tract["tract_area_km2"] if "tract_area_km2" in tract else 0
                 ),
+                "Total Intersections": 0,
                 "Intersection Density": 0,
+                "Total Bus Stops": 0,
                 "Bus-Stop Density": 0,
+                "Total Parking Lots": 0,
                 "Parking-Lot/Space Density": 0,
                 "Length of Interstate Highway": 0,
                 "Length of State Highway": 0,
