@@ -289,6 +289,8 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         "Length of Local Roads": 0,
         "Length of Bicycle Lanes": 0,
         "Length of Bike Trails": 0,
+        "Length of Pedestrian Crosswalks": 0,
+        "Length of Sidewalks": 0,
     }
 
     # Calculate point densities
@@ -350,7 +352,17 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         metrics["Length of Bike Trails"] = calculate_length_within_polygon(
             infrastructure["bike_trails"], tract_gdf
         )
+    # Calculate length of pedestrian crosswalks
+    if "pedestrian_crosswalks" in infrastructure:
+        metrics["Length of Pedestrian Crosswalks"] = calculate_length_within_polygon(
+            infrastructure["pedestrian_crosswalks"], tract_gdf
+        )
 
+    # Calculate length of sidewalks
+    if "sidewalks" in infrastructure:
+        metrics["Length of Sidewalks"] = calculate_length_within_polygon(
+            infrastructure["sidewalks"], tract_gdf
+        )
     return metrics
 
 
@@ -375,10 +387,10 @@ def main(tracts_file, features_dir, output_file):
 
     # Calculate metrics for each tract
     results = []
-
+    print(f"Calculating metrics for {len(tracts)} census tracts...")
     for idx, tract in tracts.iterrows():
         try:
-            print(f"Processing tract {idx+1}/{len(tracts)}: {tract['tract_id']}")
+            # print(f"Processing tract {idx+1}/{len(tracts)}: {tract['tract_id']}")
             # Pass a reference to the full tracts GeoDataFrame
             tract_metrics = calculate_tract_metrics(tract, tracts, infrastructure)
             results.append(tract_metrics)
@@ -399,6 +411,8 @@ def main(tracts_file, features_dir, output_file):
                 "Length of Local Roads": 0,
                 "Length of Bicycle Lanes": 0,
                 "Length of Bike Trails": 0,
+                "Length of Pedestrian Crosswalks": 0,
+                "Length of Sidewalks": 0,
             }
             results.append(default_metrics)
 
