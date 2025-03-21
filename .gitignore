@@ -39,10 +39,11 @@ venv.bak/
 
 # Data files
 data/osm_features/
+data/county_*
 # OS-specific
 .DS_Store
 .DS_Store?
-._*
+**/._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
