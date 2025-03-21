@@ -67,9 +67,9 @@ def load_census_tracts(geojson_file):
     return tracts
 
 
-def load_accident_data(accident_file):
+def load_accident_data(accident_file, county_name="MILWAUKEE"):
     """
-    Load accident data from a CSV file and filter for Milwaukee county
+    Load accident data from a CSV file and filter for a county
 
     Parameters:
     accident_file: Path to the accident CSV file
@@ -89,9 +89,9 @@ def load_accident_data(accident_file):
     # Ensure COUNTY is string type for filtering
     accidents["COUNTY"] = accidents["COUNTY"].astype(str)
 
-    # Filter for Milwaukee county (case insensitive)
-    milwaukee_accidents = accidents[accidents["COUNTY"].str.upper() == "MILWAUKEE"]
-    print(f"Filtered to {len(milwaukee_accidents)} accidents in Milwaukee county")
+    # Filter for county (case insensitive)
+    county_accidents = accidents[accidents["COUNTY"].str.upper() == county_name.upper()]
+    print(f"Filtered to {len(county_accidents)} accidents in the county")
 
     # Check we have required columns
     required_columns = [
@@ -104,7 +104,7 @@ def load_accident_data(accident_file):
         "DOCTNMBR",
     ]
     missing_columns = [
-        col for col in required_columns if col not in milwaukee_accidents.columns
+        col for col in required_columns if col not in county_accidents.columns
     ]
 
     if missing_columns:
@@ -112,14 +112,14 @@ def load_accident_data(accident_file):
         raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
     # Check we have pedestrian and bicycle accidents
-    ped_accidents = milwaukee_accidents[milwaukee_accidents["PEDFLAG"] == "Y"]
-    bike_accidents = milwaukee_accidents[milwaukee_accidents["BIKEFLAG"] == "Y"]
+    ped_accidents = county_accidents[county_accidents["PEDFLAG"] == "Y"]
+    bike_accidents = county_accidents[county_accidents["BIKEFLAG"] == "Y"]
 
     print(
         f"Found {len(ped_accidents)} pedestrian accidents and {len(bike_accidents)} bicycle accidents"
     )
 
-    return milwaukee_accidents
+    return county_accidents
 
 
 def create_accident_geodataframe(accidents_df):
@@ -289,23 +289,26 @@ def calculate_accident_metrics(tracts_gdf, accidents_gdf):
 
 
 def main():
+    county_name = "MILWAUKEE"
+    county_fips = "079"
+
     # Define paths
     base_dir = Path("data")
     input_dir = base_dir / "input"
-    final_dir = base_dir / "final"
+    county_dir = base_dir / f"county_{county_fips}"
 
     # Create directories if they don't exist
-    for directory in [base_dir, input_dir, final_dir]:
+    for directory in [base_dir, input_dir, county_dir]:
         directory.mkdir(exist_ok=True, parents=True)
 
     # Define file paths
-    tracts_file = input_dir / "milwaukee_census_tracts.geojson"
-    accident_file = input_dir / "accident_data.csv"
-    metrics_file = final_dir / "milwaukee_census_tract_metrics.csv"
-    output_file = final_dir / "milwaukee_census_tract_metrics_with_accidents.csv"
+    tracts_file = county_dir / "census_tracts.geojson"
+    accident_file = input_dir / f"county_{county_fips}_accident_data.csv"
+    metrics_file = county_dir / "census_tract_metrics.csv"
+    output_file = county_dir / "census_tract_metrics_with_accidents.csv"
 
     print("\n" + "=" * 80)
-    print("ACCIDENT ANALYSIS FOR MILWAUKEE CENSUS TRACTS")
+    print("ACCIDENT ANALYSIS FOR CENSUS TRACTS")
     print("=" * 80 + "\n")
 
     # Check if files exist
@@ -334,7 +337,7 @@ def main():
 
     # Load and filter accident data
     print("\n--- STEP 2: Loading Accident Data ---")
-    accidents_df = load_accident_data(accident_file)
+    accidents_df = load_accident_data(accident_file, county_name)
 
     # Create accident GeoDataFrame
     print("\n--- STEP 3: Creating Accident GeoDataFrame ---")
