@@ -454,8 +454,45 @@ def fetch_wisconsin_county_infrastructure(
             """,
             "type": "line",
         },
+        "bike_lane": {
+            "query": f"""
+            [out:json][timeout:600];
+            (
+                way["highway"="cycleway"](poly:"{poly_str}");
+                way["cycleway"](poly:"{poly_str}");
+            );
+            (._;>;);
+            out body;
+            """,
+            "type": "line",
+        },
+        "buffered_bike_lanes": {
+            "query": f"""
+            [out:json][timeout:600];
+            (
+                way["highway"="cycleway"]["cycleway"="track"](poly:"{poly_str}");
+                way["cycleway"="track"](poly:"{poly_str}");
+            );
+            (._;>;);
+            out body;
+            """,
+            "type": "line",
+        },
+        "shared_bike_lanes": {
+            "query": f"""
+            [out:json][timeout:600];
+            (
+                way["highway"="cycleway"]["cycleway"="shared_lane"](poly:"{poly_str}");
+                way["cycleway"="shared_lane"](poly:"{poly_str}");
+                way["highway"="cycleway"]["cycleway"="share_busway"](poly:"{poly_str}");
+                way["cycleway"="share_busway"](poly:"{poly_str}");
+            );
+            (._;>;);
+            out body;
+            """,
+            "type": "line",
+        },
     }
-
     # Fetch each feature
     results = {}
 
