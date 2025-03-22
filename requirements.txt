@@ -4,3 +4,5 @@ requests
 shapely
 pyproj
 numpy
+seaborn
+matplotlib
