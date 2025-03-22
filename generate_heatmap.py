@@ -178,27 +178,24 @@ if __name__ == "__main__":
     # File paths
     csv_file = f"data/county_{county_fips}/census_tract_metrics_with_accidents.csv"
 
-    # Generate a map for Pedestrian_Accidents
-    generate_choropleth_map(csv_file, geojson_file, "Pedestrian_Accidents", county_fips)
-
     # Optionally generate maps for multiple fields
     accident_fields = [
-        "Pedestrian_Accidents",
+        # "Pedestrian_Accidents",
         "Pedestrian_Fatalities",
-        "Pedestrian_Injuries",
-        "Bicycle_Accidents",
-        "Bicycle_Fatalities",
-        "Bicycle_Injuries",
+        # "Pedestrian_Injuries",
+        # "Bicycle_Accidents",
+        # "Bicycle_Fatalities",
+        # "Bicycle_Injuries",
     ]
 
     infrastructure_fields = [
-        "Intersection Density",
-        "Bus-Stop Density",
-        "Length of Bicycle Lanes",
-        "Length of Pedestrian Crosswalks",
-        "Length of Sidewalks",
+        "Total Parking Lots",
+        # "Bus-Stop Density",
+        # "Length of Bicycle Lanes",
+        # "Length of Pedestrian Crosswalks",
+        # "Length of Sidewalks",
     ]
 
     # Uncomment to generate multiple maps
-    # generate_multiple_maps(csv_file, geojson_file, accident_fields, county_fips)
+    generate_multiple_maps(csv_file, geojson_file, accident_fields, county_fips)
     generate_multiple_maps(csv_file, geojson_file, infrastructure_fields, county_fips)
