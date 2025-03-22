@@ -20,8 +20,7 @@ def remove_water_from_geojson(input_geojson, output_geojson=None):
     """
     # Create default output filename if not provided
     if output_geojson is None:
-        base_name = os.path.splitext(input_geojson)[0]
-        output_geojson = f"{base_name}_land_only.geojson"
+        output_geojson = input_geojson
 
     # Read the GeoJSON
     print(f"Reading GeoJSON: {input_geojson}")

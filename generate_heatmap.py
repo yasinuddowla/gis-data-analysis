@@ -3,7 +3,6 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
-from remove_water import remove_water_from_geojson
 
 
 def generate_choropleth_map(
@@ -174,14 +173,10 @@ def generate_multiple_maps(csv_file, geojson_file, fields_to_map, county_fips):
 if __name__ == "__main__":
 
     county_fips = "079"
-    # Remove water from the GeoJSON file
-    input_file = f"data/county_{county_fips}/census_tracts.geojson"
-    output_file = f"data/county_{county_fips}/census_tracts_land_only.geojson"
-    remove_water_from_geojson(input_file, output_file)
+    geojson_file = f"data/county_{county_fips}/census_tracts.geojson"
 
     # File paths
     csv_file = f"data/county_{county_fips}/census_tract_metrics_with_accidents.csv"
-    geojson_file = output_file
 
     # Generate a map for Pedestrian_Accidents
     generate_choropleth_map(csv_file, geojson_file, "Pedestrian_Accidents", county_fips)

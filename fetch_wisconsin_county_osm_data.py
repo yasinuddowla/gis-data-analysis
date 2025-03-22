@@ -4,69 +4,11 @@ import requests
 import time
 import os
 import json
-import argparse
 from shapely.geometry import Point, LineString, Polygon
 from pathlib import Path
 
-
-def get_wisconsin_county_bounds(shapefile_path, county_fips):
-    """
-    Extract county boundaries from Wisconsin shapefile based on COUNTYFP
-
-    Parameters:
-    shapefile_path: Path to Wisconsin state shapefile
-    county_fips: County FIPS code to extract (COUNTYFP)
-
-    Returns:
-    GeoDataFrame containing only the tracts for the specified county,
-    the county boundary polygon, bounding box, county name, and centroid
-    """
-    print(f"Loading Wisconsin shapefile from {shapefile_path}...")
-    try:
-        # Read the state shapefile
-        state_gdf = gpd.read_file(shapefile_path)
-        print(f"Available columns: {state_gdf.columns.tolist()}")
-
-        # Filter to get only the specified county
-        if "COUNTYFP" in state_gdf.columns:
-            county_gdf = state_gdf[state_gdf["COUNTYFP"] == county_fips]
-        elif "COUNTY" in state_gdf.columns:
-            county_gdf = state_gdf[state_gdf["COUNTY"] == county_fips]
-        else:
-            print("Could not find COUNTYFP or COUNTY column in shapefile")
-            return None, None, None, None, None
-
-        if county_gdf.empty:
-            print(f"No data found for county FIPS code {county_fips}")
-            return None, None, None, None, None
-
-        # Get county name from first tract
-        county_name = None
-        for name_col in ["NAME", "NAMELSAD", "COUNTY_NAME", "COUNTYNAME"]:
-            if name_col in county_gdf.columns:
-                county_name = county_gdf.iloc[0][name_col]
-                break
-
-        if not county_name:
-            county_name = f"County{county_fips}"
-
-        print(f"Found {len(county_gdf)} census tracts for {county_name}")
-
-        # Get the county boundary as a single polygon by dissolving all tracts
-        county_boundary = county_gdf.geometry.union_all()
-
-        # Calculate the total bounds for fallback
-        minx, miny, maxx, maxy = county_gdf.total_bounds
-        county_bbox = f"{miny},{minx},{maxy},{maxx}"
-
-        # Get centroid for projection selection
-        centroid = county_boundary.centroid
-
-        return county_gdf, county_boundary, county_bbox, county_name, centroid
-
-    except Exception as e:
-        print(f"Error loading Wisconsin shapefile: {e}")
-        return None, None, None, None, None
+# Import the extract_county_tracts function from our new module
+from extract_county_tracts import extract_county_tracts
 
 
 def query_overpass(query, retry_delay=60, max_retries=3):
@@ -266,305 +208,323 @@ def fetch_infrastructure_feature(feature_name, query, output_dir, geometry_type)
     return output_file
 
 
-def fetch_wisconsin_county_infrastructure(
-    county_fips, shapefile_path, output_base_dir="data"
+def fetch_county_infrastructure(
+    county_tracts_file, county_name, county_fips, output_base_dir="data"
 ):
     """
-    Fetch all transportation infrastructure features for a specific Wisconsin county
+    Fetch all transportation infrastructure features for a specific county
 
     Parameters:
-    county_fips: County FIPS code to process
-    shapefile_path: Path to Wisconsin state shapefile
+    county_tracts_file: Path to the county tracts GeoJSON file
+    county_name: Name of the county
+    county_fips: County FIPS code
     output_base_dir: Base directory for output files
     """
-    # Get county boundaries and bounding box
-    county_data = get_wisconsin_county_bounds(shapefile_path, county_fips)
-    if county_data is None or len(county_data) < 4:
-        print(f"Unable to process county with FIPS code: {county_fips}")
-        return None, None
+    try:
+        # Load the county tracts from GeoJSON
+        print(f"Loading county tracts from {county_tracts_file}...")
+        county_gdf = gpd.read_file(county_tracts_file)
 
-    county_gdf, county_boundary, county_bbox, county_name, centroid = county_data
+        if county_gdf.empty:
+            print(f"No data found in county tracts file: {county_tracts_file}")
+            return None, None
 
-    # Create county-specific output directories
-    county_dir = os.path.join(output_base_dir, f"county_{county_fips}")
-    county_osm_dir = os.path.join(county_dir, "osm_features")
+        print(f"Loaded {len(county_gdf)} census tracts for {county_name}")
 
-    Path(county_dir).mkdir(parents=True, exist_ok=True)
-    Path(county_osm_dir).mkdir(parents=True, exist_ok=True)
+        # Get the county boundary by dissolving all tracts
+        county_boundary = county_gdf.geometry.union_all()
 
-    # Save the county tracts as GeoJSON
-    county_tracts_file = os.path.join(county_dir, "census_tracts.geojson")
-    county_gdf.to_file(county_tracts_file, driver="GeoJSON")
-    print(f"Saved {len(county_gdf)} census tracts to {county_tracts_file}")
+        # Calculate the bounding box
+        minx, miny, maxx, maxy = county_gdf.total_bounds
+        county_bbox = f"{miny},{minx},{maxy},{maxx}"
 
-    # Convert county boundary to Overpass polygon format
-    # The Overpass API expects a polygon in format: lat1 lon1 lat2 lon2 lat3 lon3...
-    # Simplify the geometry to reduce the number of points (for Overpass API limits)
-    simplified_boundary = county_boundary.simplify(0.001)  # Adjust tolerance as needed
+        # Get centroid
+        centroid = county_boundary.centroid
 
-    if simplified_boundary.geom_type == "MultiPolygon":
-        # Use the largest polygon if it's a MultiPolygon
-        largest_poly = max(simplified_boundary.geoms, key=lambda x: x.area)
-        boundary_coords = largest_poly.exterior.coords
-    else:
-        boundary_coords = simplified_boundary.exterior.coords
+        # Create county-specific output directories
+        county_dir = os.path.dirname(county_tracts_file)
+        county_osm_dir = os.path.join(county_dir, "osm_features")
 
-    # Format for Overpass: lat1 lon1 lat2 lon2...
-    poly_str = " ".join([f"{y} {x}" for x, y in boundary_coords])
+        Path(county_osm_dir).mkdir(parents=True, exist_ok=True)
 
-    # Define infrastructure feature queries with their appropriate geometry types
-    features = {
-        "intersections": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              node["highway"="crossing"](poly:"{poly_str}");
-              node["junction"="roundabout"](poly:"{poly_str}");
-              way["junction"="roundabout"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "point",
-        },
-        "bus_stops": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              node["highway"="bus_stop"](poly:"{poly_str}");
-              node["public_transport"="stop_position"]["bus"="yes"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "point",
-        },
-        "parking_lots": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["amenity"="parking"](poly:"{poly_str}");
-              relation["amenity"="parking"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "area",
-        },
-        "interstate_highways": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="motorway"](poly:"{poly_str}");
-              way["highway"="motorway_link"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "state_highways": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="trunk"](poly:"{poly_str}");
-              way["highway"="trunk_link"](poly:"{poly_str}");
-              way["highway"="primary"](poly:"{poly_str}");
-              way["highway"="primary_link"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "collector_roads": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="secondary"](poly:"{poly_str}");
-              way["highway"="secondary_link"](poly:"{poly_str}");
-              way["highway"="tertiary"](poly:"{poly_str}");
-              way["highway"="tertiary_link"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "local_roads": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="residential"](poly:"{poly_str}");
-              way["highway"="service"](poly:"{poly_str}");
-              way["highway"="unclassified"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "bicycle_lanes": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="cycleway"](poly:"{poly_str}");
-              way["cycleway"](poly:"{poly_str}");
-              way["bicycle"="designated"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "bicycle_paths": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="path"]["bicycle"="designated"](poly:"{poly_str}");
-              way["route"="bicycle"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "pedestrian_crosswalks": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="footway"]["footway"="crossing"](poly:"{poly_str}");
-              way["highway"="path"]["path"="crossing"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "sidewalks": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-              way["highway"="footway"]["footway"="sidewalk"](poly:"{poly_str}");
-              way["highway"="path"]["path"="sidewalk"](poly:"{poly_str}");
-              way["sidewalk"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "bike_lane": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-                way["highway"="cycleway"](poly:"{poly_str}");
-                way["cycleway"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "buffered_bike_lanes": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-                way["highway"="cycleway"]["cycleway"="track"](poly:"{poly_str}");
-                way["cycleway"="track"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-        "shared_bike_lanes": {
-            "query": f"""
-            [out:json][timeout:600];
-            (
-                way["highway"="cycleway"]["cycleway"="shared_lane"](poly:"{poly_str}");
-                way["cycleway"="shared_lane"](poly:"{poly_str}");
-                way["highway"="cycleway"]["cycleway"="share_busway"](poly:"{poly_str}");
-                way["cycleway"="share_busway"](poly:"{poly_str}");
-            );
-            (._;>;);
-            out body;
-            """,
-            "type": "line",
-        },
-    }
-    # Fetch each feature
-    results = {}
+        # Convert county boundary to Overpass polygon format
+        # Simplify the geometry to reduce the number of points (for Overpass API limits)
+        simplified_boundary = county_boundary.simplify(
+            0.001
+        )  # Adjust tolerance as needed
 
-    for feature_name, feature_info in features.items():
-        output_file = fetch_infrastructure_feature(
-            feature_name, feature_info["query"], county_osm_dir, feature_info["type"]
-        )
+        if simplified_boundary.geom_type == "MultiPolygon":
+            # Use the largest polygon if it's a MultiPolygon
+            largest_poly = max(simplified_boundary.geoms, key=lambda x: x.area)
+            boundary_coords = largest_poly.exterior.coords
+        else:
+            boundary_coords = simplified_boundary.exterior.coords
 
-        results[feature_name] = {
-            "file": os.path.basename(output_file) if output_file else None,
-            "geometry_type": feature_info["type"],
+        # Format for Overpass: lat1 lon1 lat2 lon2...
+        poly_str = " ".join([f"{y} {x}" for x, y in boundary_coords])
+
+        # Define infrastructure feature queries with their appropriate geometry types
+        features = {
+            "intersections": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  node["highway"="crossing"](poly:"{poly_str}");
+                  node["junction"="roundabout"](poly:"{poly_str}");
+                  way["junction"="roundabout"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "point",
+            },
+            "bus_stops": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  node["highway"="bus_stop"](poly:"{poly_str}");
+                  node["public_transport"="stop_position"]["bus"="yes"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "point",
+            },
+            "parking_lots": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["amenity"="parking"](poly:"{poly_str}");
+                  relation["amenity"="parking"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "area",
+            },
+            "interstate_highways": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="motorway"](poly:"{poly_str}");
+                  way["highway"="motorway_link"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "state_highways": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="trunk"](poly:"{poly_str}");
+                  way["highway"="trunk_link"](poly:"{poly_str}");
+                  way["highway"="primary"](poly:"{poly_str}");
+                  way["highway"="primary_link"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "collector_roads": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="secondary"](poly:"{poly_str}");
+                  way["highway"="secondary_link"](poly:"{poly_str}");
+                  way["highway"="tertiary"](poly:"{poly_str}");
+                  way["highway"="tertiary_link"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "local_roads": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="residential"](poly:"{poly_str}");
+                  way["highway"="service"](poly:"{poly_str}");
+                  way["highway"="unclassified"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "bicycle_lanes": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="cycleway"](poly:"{poly_str}");
+                  way["cycleway"](poly:"{poly_str}");
+                  way["bicycle"="designated"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "bicycle_paths": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="path"]["bicycle"="designated"](poly:"{poly_str}");
+                  way["route"="bicycle"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "pedestrian_crosswalks": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="footway"]["footway"="crossing"](poly:"{poly_str}");
+                  way["highway"="path"]["path"="crossing"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "sidewalks": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                  way["highway"="footway"]["footway"="sidewalk"](poly:"{poly_str}");
+                  way["highway"="path"]["path"="sidewalk"](poly:"{poly_str}");
+                  way["sidewalk"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "bike_lane": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                    way["highway"="cycleway"](poly:"{poly_str}");
+                    way["cycleway"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "buffered_bike_lanes": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                    way["highway"="cycleway"]["cycleway"="track"](poly:"{poly_str}");
+                    way["cycleway"="track"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
+            "shared_bike_lanes": {
+                "query": f"""
+                [out:json][timeout:600];
+                (
+                    way["highway"="cycleway"]["cycleway"="shared_lane"](poly:"{poly_str}");
+                    way["cycleway"="shared_lane"](poly:"{poly_str}");
+                    way["highway"="cycleway"]["cycleway"="share_busway"](poly:"{poly_str}");
+                    way["cycleway"="share_busway"](poly:"{poly_str}");
+                );
+                (._;>;);
+                out body;
+                """,
+                "type": "line",
+            },
         }
 
-        # Wait between queries to avoid rate limiting
-        if feature_name != list(features.keys())[-1]:  # Don't wait after the last query
-            delay = 3  # seconds
-            print(f"Waiting {delay} seconds before next query...")
-            time.sleep(delay)
+        # Fetch each feature
+        results = {}
 
-    # Create a summary file
-    summary = {
-        "county_fips": county_fips,
-        "county_name": county_name,
-        "census_tracts_file": os.path.relpath(county_tracts_file, county_osm_dir),
-        "features_fetched": [
-            {
-                "name": name,
-                "geometry_type": info["geometry_type"],
-                "file": info["file"],
+        for feature_name, feature_info in features.items():
+            output_file = fetch_infrastructure_feature(
+                feature_name,
+                feature_info["query"],
+                county_osm_dir,
+                feature_info["type"],
+            )
+
+            results[feature_name] = {
+                "file": os.path.basename(output_file) if output_file else None,
+                "geometry_type": feature_info["type"],
             }
-            for name, info in results.items()
-            if info["file"] is not None
-        ],
-        "timestamp": pd.Timestamp.now().isoformat(),
-    }
 
-    with open(os.path.join(county_osm_dir, "summary.json"), "w") as f:
-        json.dump(summary, f, indent=2)
+            # Wait between queries to avoid rate limiting
+            if (
+                feature_name != list(features.keys())[-1]
+            ):  # Don't wait after the last query
+                delay = 3  # seconds
+                print(f"Waiting {delay} seconds before next query...")
+                time.sleep(delay)
 
-    print(
-        f"\nAll infrastructure data for {county_name} County (FIPS: {county_fips}) fetched and saved"
-    )
-    print(f"Census tracts: {county_tracts_file}")
-    print(f"OSM features: {county_osm_dir}")
-    print(
-        f"Created {len([f for f in os.listdir(county_osm_dir) if f.endswith('.geojson')])} GeoJSON files"
-    )
+        # Create a summary file
+        summary = {
+            "county_fips": county_fips,
+            "county_name": county_name,
+            "census_tracts_file": os.path.relpath(county_tracts_file, county_osm_dir),
+            "features_fetched": [
+                {
+                    "name": name,
+                    "geometry_type": info["geometry_type"],
+                    "file": info["file"],
+                }
+                for name, info in results.items()
+                if info["file"] is not None
+            ],
+            "timestamp": pd.Timestamp.now().isoformat(),
+        }
 
-    return county_dir, county_tracts_file
+        with open(os.path.join(county_osm_dir, "summary.json"), "w") as f:
+            json.dump(summary, f, indent=2)
+
+        print(
+            f"\nAll infrastructure data for {county_name} County (FIPS: {county_fips}) fetched and saved"
+        )
+        print(f"Census tracts: {county_tracts_file}")
+        print(f"OSM features: {county_osm_dir}")
+        print(
+            f"Created {len([f for f in os.listdir(county_osm_dir) if f.endswith('.geojson')])} GeoJSON files"
+        )
+
+        return county_dir, county_tracts_file
+
+    except Exception as e:
+        print(f"Error processing county data: {e}")
+        return None, None
 
 
-if __name__ == "__main__":
-    import sys
-
+def main():
     # Hardcoded paths and parameters
-    shapefile_path = "data/input/shape/tl_2024_55_tract.shp"
     county_fips = "079"  # Milwaukee County
+    county_tracts_file = f"data/county_{county_fips}/census_tracts.geojson"
+    county_name = "Milwaukee"
     output_base_dir = "data"
 
-    # Check if shapefile exists
-    if not os.path.exists(shapefile_path):
-        print(f"ERROR: Shapefile not found at {shapefile_path}")
+    # Check if GeoJSON file exists
+    if not os.path.exists(county_tracts_file):
+        print(f"ERROR: County tracts GeoJSON file not found at {county_tracts_file}")
         print("Please check the path and ensure the file exists.")
-        sys.exit(1)  # Exit with error status
+        return 1
 
-    print(f"Processing Wisconsin County FIPS: {county_fips}")
-    print(f"Using shapefile: {shapefile_path}")
+    print(f"Processing {county_name} County (FIPS: {county_fips})")
+    print(f"Using county tracts GeoJSON: {county_tracts_file}")
     print(f"Output directory: {output_base_dir}")
 
     # Fetch infrastructure features for the specified county
-    county_dir, county_tracts_file = fetch_wisconsin_county_infrastructure(
-        county_fips, shapefile_path, output_base_dir
+    county_dir, county_tracts_file = fetch_county_infrastructure(
+        county_tracts_file, county_name, county_fips, output_base_dir
     )
 
     if county_dir and county_tracts_file:
@@ -573,3 +533,13 @@ if __name__ == "__main__":
         print(f"1. Run calculate_census_tract_metrics.py with the following inputs:")
         print(f"   - Census tracts file: {county_tracts_file}")
         print(f"   - Features directory: {osm_features_dir}")
+        return 0
+    else:
+        print("\nFailed to fetch county infrastructure data")
+        return 1
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
