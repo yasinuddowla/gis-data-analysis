@@ -11,6 +11,7 @@ def generate_choropleth_map(
     field_to_map,
     county_fips,
     output_file="pedestrian_accidents_map.png",
+    colormap_name="viridis",
 ):
     """
     Generate a choropleth map for census tracts in a specific county, colored based on a field from CSV data.
@@ -90,8 +91,12 @@ def generate_choropleth_map(
         merged_gdf[field_to_map] = merged_gdf[field_to_map].fillna(0)
 
     # Create a custom colormap for better visualization
-    # Using a sequential colormap like YlOrRd (yellow-orange-red) for accident data
-    cmap = plt.cm.YlOrRd
+    # Using a sequential colormap
+    try:
+        cmap = plt.get_cmap(colormap_name)
+    except ValueError:
+        print(f"Colormap '{colormap_name}' not found. Using default 'viridis'.")
+        cmap = plt.cm.viridis
 
     # Get the value range for normalization
     vmin = merged_gdf[field_to_map].min()
@@ -116,6 +121,8 @@ def generate_choropleth_map(
         edgecolor="black",
         ax=ax,
     )
+    # change plot color
+    ax.set_facecolor("lightgrey")
 
     # Add a colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -150,7 +157,9 @@ def generate_choropleth_map(
     return merged_gdf
 
 
-def generate_multiple_maps(csv_file, geojson_file, fields_to_map, county_fips):
+def generate_multiple_maps(
+    csv_file, geojson_file, fields_to_map, county_fips, colormap_name
+):
     """
     Generate multiple choropleth maps for different fields in the CSV.
 
@@ -167,12 +176,15 @@ def generate_multiple_maps(csv_file, geojson_file, fields_to_map, county_fips):
     """
     for field in fields_to_map:
         output_file = f"{field.lower().replace(' ', '_')}_map.png"
-        generate_choropleth_map(csv_file, geojson_file, field, county_fips, output_file)
+        generate_choropleth_map(
+            csv_file, geojson_file, field, county_fips, output_file, colormap_name
+        )
 
 
 if __name__ == "__main__":
 
     county_fips = "079"
+    colormap_name = "PuBuGn"
     geojson_file = f"data/county_{county_fips}/census_tracts.geojson"
 
     # File paths
@@ -197,5 +209,7 @@ if __name__ == "__main__":
     ]
 
     # Uncomment to generate multiple maps
-    generate_multiple_maps(csv_file, geojson_file, accident_fields, county_fips)
-    generate_multiple_maps(csv_file, geojson_file, infrastructure_fields, county_fips)
+    generate_multiple_maps(
+        csv_file, geojson_file, accident_fields, county_fips, colormap_name
+    )
+    # generate_multiple_maps(csv_file, geojson_file, infrastructure_fields, county_fips)
