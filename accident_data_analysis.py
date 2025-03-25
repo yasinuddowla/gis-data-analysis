@@ -352,45 +352,20 @@ def main():
     existing_metrics = pd.read_csv(metrics_file)
     print(f"Loaded {len(existing_metrics)} existing census tract records")
 
-    # Instead of using join, use merge with proper debugging
-    print("\nTesting tract ID formats...")
-    print(
-        f"Sample from existing_metrics: {existing_metrics['Census Tract'].head(5).tolist()}"
-    )
-    print(
-        f"Sample from accident_metrics: {accident_metrics['Census Tract'].head(5).tolist()}"
-    )
+    # Make sure Census Tract is string type in both DataFrames
+    existing_metrics["Census Tract"] = existing_metrics["Census Tract"].astype(str)
+    accident_metrics["Census Tract"] = accident_metrics["Census Tract"].astype(str)
 
-    # Standardize tract IDs to ensure they match
-    existing_metrics["Census Tract"] = (
-        existing_metrics["Census Tract"].astype(str).str.strip()
-    )
-    accident_metrics["Census Tract"] = (
-        accident_metrics["Census Tract"].astype(str).str.strip()
-    )
+    # Alternative approach using join instead of merge
+    print("\nUsing alternative join approach...")
 
-    # Check for tract IDs in accident_metrics not in existing_metrics
-    accident_tract_ids = set(accident_metrics["Census Tract"])
-    existing_tract_ids = set(existing_metrics["Census Tract"])
-    missing_tracts = accident_tract_ids - existing_tract_ids
-    if missing_tracts:
-        print(
-            f"WARNING: {len(missing_tracts)} tract IDs in accident data not in existing metrics!"
-        )
-        print(f"Sample missing tract IDs: {list(missing_tracts)[:5]}")
+    # Set 'Census Tract' as index for both DataFrames
+    existing_metrics_indexed = existing_metrics.set_index("Census Tract")
+    accident_metrics_indexed = accident_metrics.set_index("Census Tract")
 
-    # Use merge instead of join
-    merged_metrics = pd.merge(
-        existing_metrics,
-        accident_metrics,
-        on="Census Tract",
-        how="left",
-        validate="one_to_one",  # Validate no duplications occur
-    )
-
-    # Check if merge worked
-    total_after_merge = merged_metrics["Pedestrian_Accidents"].sum()
-    print(f"Total pedestrian accidents after merge: {total_after_merge}")
+    # Join the DataFrames
+    print("Joining dataframes...")
+    merged_metrics = existing_metrics_indexed.join(accident_metrics_indexed, how="left")
 
     # Reset the index to make 'Census Tract' a column again
     merged_metrics = merged_metrics.reset_index()
