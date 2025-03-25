@@ -16,7 +16,6 @@ def load_census_tracts(geojson_file):
     Returns:
     GeoDataFrame containing census tracts with 'tract_id' field
     """
-    print(f"Loading census tracts from {geojson_file}...")
     tracts = gpd.read_file(geojson_file)
 
     # Print columns to identify the tract identifier
@@ -59,10 +58,6 @@ def load_census_tracts(geojson_file):
             # If not, create sequential IDs
             print("No obvious tract ID column found. Creating sequential IDs.")
             tracts["tract_id"] = [f"TRACT_{i:04d}" for i in range(1, len(tracts) + 1)]
-
-    # Display a sample of tract IDs to help with debugging
-    print("\nSample tract IDs:")
-    print(tracts["tract_id"].head())
 
     return tracts
 
@@ -192,17 +187,20 @@ def calculate_accident_metrics(tracts_gdf, accidents_gdf):
     metrics = pd.DataFrame({"Census Tract": tracts_gdf["tract_id"]})
 
     # Ensure Census Tract is string type
+    metrics = metrics.copy()
     metrics["Census Tract"] = metrics["Census Tract"].astype(str)
     metrics = metrics.set_index("Census Tract")
 
     # Calculate pedestrian accident metrics
-    print("Calculating pedestrian accident metrics...")
+    print("\nCalculating pedestrian accident metrics...")
     ped_accidents = joined[joined["PEDFLAG"] == "Y"]
     print(f"Found {len(ped_accidents)} pedestrian accidents")
+    print(f"Of these, {ped_accidents['tract_id'].notna().sum()} have valid tract IDs")
 
     # Group by tract and calculate metrics
     if not ped_accidents.empty:
         # Ensure tract_id is string type
+        ped_accidents = ped_accidents.copy()
         ped_accidents["tract_id"] = ped_accidents["tract_id"].astype(str)
 
         ped_metrics = (
@@ -232,13 +230,14 @@ def calculate_accident_metrics(tracts_gdf, accidents_gdf):
         metrics["Pedestrian_Accidents"] = 0
 
     # Calculate bicycle accident metrics
-    print("Calculating bicycle accident metrics...")
+    print("\nCalculating bicycle accident metrics...")
     bike_accidents = joined[joined["BIKEFLAG"] == "Y"]
     print(f"Found {len(bike_accidents)} bicycle accidents")
-
+    print(f"Of these, {bike_accidents['tract_id'].notna().sum()} have valid tract IDs")
     # Group by tract and calculate metrics
     if not bike_accidents.empty:
         # Ensure tract_id is string type
+        bike_accidents = bike_accidents.copy()
         bike_accidents["tract_id"] = bike_accidents["tract_id"].astype(str)
 
         bike_metrics = (
@@ -353,32 +352,9 @@ def main():
     existing_metrics = pd.read_csv(metrics_file)
     print(f"Loaded {len(existing_metrics)} existing census tract records")
 
-    # Check and print data types
-    print("\nData types of Census Tract columns:")
-    print(f"Existing metrics: {existing_metrics['Census Tract'].dtype}")
-    print(f"Accident metrics: {accident_metrics['Census Tract'].dtype}")
-
     # Make sure Census Tract is string type in both DataFrames
-    print("Converting both Census Tract columns to string type...")
     existing_metrics["Census Tract"] = existing_metrics["Census Tract"].astype(str)
     accident_metrics["Census Tract"] = accident_metrics["Census Tract"].astype(str)
-
-    # Print after conversion
-    print(
-        f"After conversion - Existing metrics: {existing_metrics['Census Tract'].dtype}"
-    )
-    print(
-        f"After conversion - Accident metrics: {accident_metrics['Census Tract'].dtype}"
-    )
-
-    # Display samples for comparison
-    print("\nSample from existing metrics:")
-    for i, tract_id in enumerate(existing_metrics["Census Tract"].head()):
-        print(f"{i}: '{tract_id}' (type: {type(tract_id)})")
-
-    print("\nSample from accident metrics:")
-    for i, tract_id in enumerate(accident_metrics["Census Tract"].head()):
-        print(f"{i}: '{tract_id}' (type: {type(tract_id)})")
 
     # Alternative approach using join instead of merge
     print("\nUsing alternative join approach...")
