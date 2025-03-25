@@ -34,7 +34,8 @@ def generate_choropleth_map(
 
     # Make sure Census Tract is treated as a string to match GeoJSON format
     df["Census Tract"] = df["Census Tract"].astype(str)
-
+    # make census tract ids 6 characters long with leading zeros
+    df["Census Tract"] = df["Census Tract"].str.zfill(6)
     # Read the GeoJSON file
     gdf = gpd.read_file(geojson_file)
 
@@ -184,7 +185,7 @@ def generate_multiple_maps(
 if __name__ == "__main__":
 
     county_fips = "079"
-    colormap_name = "PuBuGn"
+    colormap_name = "YlOrRd"
     geojson_file = f"data/county_{county_fips}/census_tracts.geojson"
 
     # File paths
@@ -192,12 +193,12 @@ if __name__ == "__main__":
 
     # Optionally generate maps for multiple fields
     accident_fields = [
-        # "Pedestrian_Accidents",
+        "Pedestrian_Accidents",
         "Pedestrian_Fatalities",
-        # "Pedestrian_Injuries",
-        # "Bicycle_Accidents",
-        # "Bicycle_Fatalities",
-        # "Bicycle_Injuries",
+        "Pedestrian_Injuries",
+        "Bicycle_Accidents",
+        "Bicycle_Fatalities",
+        "Bicycle_Injuries",
     ]
 
     infrastructure_fields = [
