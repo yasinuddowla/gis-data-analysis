@@ -40,6 +40,8 @@ venv.bak/
 # Data files
 data/osm_features/
 data/county_*
+data/morans_i/
+data/vif/
 # OS-specific
 .DS_Store
 .DS_Store?

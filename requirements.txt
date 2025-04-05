@@ -6,3 +6,6 @@ pyproj
 numpy
 seaborn
 matplotlib
+pysal
+esda
+splot
