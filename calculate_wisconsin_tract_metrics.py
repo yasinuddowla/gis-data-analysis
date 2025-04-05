@@ -62,28 +62,71 @@ def load_census_tracts(geojson_file):
 
     # Calculate area in square kilometers if not already present
     if "tract_area_km2" not in tracts.columns:
-        # Get centroid to determine which Wisconsin projection to use
-        centroid = tracts.geometry.union_all().centroid
-        lat = centroid.y
+        print("Calculating tract areas...")
 
-        # Select appropriate Wisconsin State Plane projection based on latitude
-        if lat > 45.5:
-            projection_epsg = 2289  # Wisconsin North
-        elif lat > 44.25:
-            projection_epsg = 2286  # Wisconsin Central
+        # Check if the tracts are in a geographic (unprojected) coordinate system
+        if tracts.crs and tracts.crs.is_geographic:
+            print(f"Current CRS is geographic: {tracts.crs}")
+
+            # Get the county bounds to determine appropriate projection
+            bounds = tracts.total_bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+
+            print(
+                f"County center is approximately at: {center_lat:.4f}, {center_lon:.4f}"
+            )
+
+            # For Milwaukee County, Wisconsin, use Wisconsin South State Plane (meters)
+            # EPSG:32054 (NAD83) or EPSG:2285 (NAD83 / Wisconsin South (ftUS))
+            # Using EPSG:3071 (NAD83 / Wisconsin CS) is also a good option for the entire state
+            projection_epsg = 3071  # Wisconsin Coordinate System (meters)
+
+            print(
+                f"Using EPSG:{projection_epsg} (Wisconsin Coordinate System) for area calculations"
+            )
+
+            # Project to the selected coordinate system
+            tracts_projected = tracts.to_crs(epsg=projection_epsg)
+
+            # Calculate area in square kilometers (convert from square meters)
+            tracts_projected["tract_area_km2"] = (
+                tracts_projected.geometry.area / 1_000_000
+            )
+
+            # Bring the calculated area back to the original GeoDataFrame
+            tracts["tract_area_km2"] = tracts_projected["tract_area_km2"]
+
+            # Calculate and print the total area for verification
+            total_area = tracts["tract_area_km2"].sum()
+            print(f"Total calculated area: {total_area:.2f} km²")
+
+            # Check for potentially duplicate or overlapping census tracts
+            unique_tracts = len(tracts["tract_id"].unique())
+            if unique_tracts < len(tracts):
+                print(
+                    f"WARNING: Found {len(tracts) - unique_tracts} duplicate tract IDs!"
+                )
+
+                # Remove duplicates to avoid double-counting area
+                tracts = tracts.drop_duplicates(subset=["tract_id"])
+                new_total_area = tracts["tract_area_km2"].sum()
+                print(f"Total area after removing duplicates: {new_total_area:.2f} km²")
+
+            # Validate against known area of Milwaukee County (~3,082 km²)
+            official_area = 3082  # km²
+            if (
+                abs(total_area - official_area) > official_area * 0.1
+            ):  # If more than 10% off
+                print(
+                    f"WARNING: Calculated area ({total_area:.2f} km²) differs significantly from "
+                    f"the official area ({official_area:.2f} km²). Check for overlapping tracts "
+                    f"or projection issues."
+                )
         else:
-            projection_epsg = 2285  # Wisconsin South
-
-        print(f"Using EPSG:{projection_epsg} projection for area calculations")
-
-        # Project to the selected coordinate system
-        tracts_projected = tracts.to_crs(epsg=projection_epsg)
-
-        # Calculate area in square kilometers
-        tracts_projected["tract_area_km2"] = tracts_projected.geometry.area / 1_000_000
-
-        # Bring the calculated area back to the original GeoDataFrame
-        tracts["tract_area_km2"] = tracts_projected["tract_area_km2"]
+            # If already in a projected CRS, calculate directly
+            print(f"Using existing projected CRS: {tracts.crs}")
+            tracts["tract_area_km2"] = tracts.geometry.area / 1_000_000
 
     print(f"Loaded {len(tracts)} census tracts")
     return tracts
@@ -324,6 +367,7 @@ def main(tracts_file, features_dir, output_file):
             # Add a default row with zeros to ensure we have a record for this tract
             default_metrics = {
                 "Census Tract": tract["tract_id"],
+                "GEOID": tract["GEOID"] if "GEOID" in tract else None,
                 "Tract Area (km^2)": (
                     tract["tract_area_km2"] if "tract_area_km2" in tract else 0
                 ),
@@ -384,6 +428,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
 
     metrics = {
         "Census Tract": tract_id,
+        "GEOID": tract_row["GEOID"],
         "Tract Area (km^2)": tract_area_km2,
         "Total Intersections": 0,
         "Intersection Density": 0,
