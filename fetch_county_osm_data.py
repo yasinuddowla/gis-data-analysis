@@ -507,7 +507,7 @@ def fetch_county_infrastructure(
 
 def main():
     # Hardcoded paths and parameters
-    county_fips = "025"  # Milwaukee County
+    county_fips = "079"  # Milwaukee County
     county_tracts_file = f"data/county_{county_fips}/census_tracts.geojson"
     county_name = "Dane"
     output_base_dir = "data"
