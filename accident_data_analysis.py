@@ -342,6 +342,16 @@ merged_metrics[accident_columns] = (
     merged_metrics[accident_columns].fillna(0).astype(int)
 )
 
+# Create a new column for the total number of pedestrian accidents as "Pedestrian_Crashes"
+merged_metrics["Pedestrian_Crashes"] = (
+    merged_metrics["Pedestrian_Fatalities"] + merged_metrics["Pedestrian_Injuries"]
+)
+
+# Create a new column for the total number of bicycle accidents as "Bicycle_Crashes"
+merged_metrics["Bicycle_Crashes"] = (
+    merged_metrics["Bicycle_Fatalities"] + merged_metrics["Bicycle_Injuries"]
+)
+
 # STEP 6: Save merged metrics
 print(f"\n--- STEP 6: Saving Results ---")
 merged_metrics.to_csv(output_file, index=False)
