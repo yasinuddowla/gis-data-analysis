@@ -267,14 +267,11 @@ def fetch_county_infrastructure(
         features = {
             "intersections": {
                 "query": f"""
-                [out:json][timeout:600];
-                (
-                  node["highway"="crossing"](poly:"{poly_str}");
-                  node["junction"="roundabout"](poly:"{poly_str}");
-                  way["junction"="roundabout"](poly:"{poly_str}");
-                );
-                (._;>;);
-                out body;
+                [out:json][timeout:25];
+                way(poly:"{poly_str}")["highway"]["highway"!~"^(footway|sidewalk|path|cycleway|pedestrian|steps|track)$"]->.highways;
+                node(w.highways)->.nodes;
+                .highways out geom;
+                .nodes out;
                 """,
                 "type": "point",
             },
@@ -282,8 +279,8 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  node["highway"="bus_stop"](poly:"{poly_str}");
-                  node["public_transport"="stop_position"]["bus"="yes"](poly:"{poly_str}");
+                    node["highway"="bus_stop"](poly:"{poly_str}");
+                    node["public_transport"="stop_position"]["bus"="yes"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -294,8 +291,8 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["amenity"="parking"](poly:"{poly_str}");
-                  relation["amenity"="parking"](poly:"{poly_str}");
+                    way["amenity"="parking"](poly:"{poly_str}");
+                    relation["amenity"="parking"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -306,8 +303,8 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="motorway"](poly:"{poly_str}");
-                  way["highway"="motorway_link"](poly:"{poly_str}");
+                    way["highway"="motorway"](poly:"{poly_str}");
+                    way["highway"="motorway_link"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -318,10 +315,10 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="trunk"](poly:"{poly_str}");
-                  way["highway"="trunk_link"](poly:"{poly_str}");
-                  way["highway"="primary"](poly:"{poly_str}");
-                  way["highway"="primary_link"](poly:"{poly_str}");
+                    way["highway"="trunk"](poly:"{poly_str}");
+                    way["highway"="trunk_link"](poly:"{poly_str}");
+                    way["highway"="primary"](poly:"{poly_str}");
+                    way["highway"="primary_link"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -332,10 +329,10 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="secondary"](poly:"{poly_str}");
-                  way["highway"="secondary_link"](poly:"{poly_str}");
-                  way["highway"="tertiary"](poly:"{poly_str}");
-                  way["highway"="tertiary_link"](poly:"{poly_str}");
+                    way["highway"="secondary"](poly:"{poly_str}");
+                    way["highway"="secondary_link"](poly:"{poly_str}");
+                    way["highway"="tertiary"](poly:"{poly_str}");
+                    way["highway"="tertiary_link"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -346,9 +343,9 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="residential"](poly:"{poly_str}");
-                  way["highway"="service"](poly:"{poly_str}");
-                  way["highway"="unclassified"](poly:"{poly_str}");
+                    way["highway"="residential"](poly:"{poly_str}");
+                    way["highway"="service"](poly:"{poly_str}");
+                    way["highway"="unclassified"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -359,9 +356,10 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="cycleway"](poly:"{poly_str}");
-                  way["cycleway"](poly:"{poly_str}");
-                  way["bicycle"="designated"](poly:"{poly_str}");
+                    way["cycleway"="lane"](poly:"{poly_str}");
+                    way["cycleway:left"="lane"](poly:"{poly_str}");
+                    way["cycleway:right"="lane"](poly:"{poly_str}");
+                    way["cycleway:both"="lane"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -372,8 +370,8 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="path"]["bicycle"="designated"](poly:"{poly_str}");
-                  way["route"="bicycle"](poly:"{poly_str}");
+                    way["highway"="cycleway"](poly:"{poly_str}");
+                    way["highway"="path"]["bicycle"="designated"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -384,8 +382,8 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="footway"]["footway"="crossing"](poly:"{poly_str}");
-                  way["highway"="path"]["path"="crossing"](poly:"{poly_str}");
+                    way["highway"="footway"]["footway"="crossing"](poly:"{poly_str}");
+                    way["highway"="path"]["path"="crossing"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;
@@ -396,47 +394,9 @@ def fetch_county_infrastructure(
                 "query": f"""
                 [out:json][timeout:600];
                 (
-                  way["highway"="footway"]["footway"="sidewalk"](poly:"{poly_str}");
-                  way["highway"="path"]["path"="sidewalk"](poly:"{poly_str}");
-                  way["sidewalk"](poly:"{poly_str}");
-                );
-                (._;>;);
-                out body;
-                """,
-                "type": "line",
-            },
-            "bike_lane": {
-                "query": f"""
-                [out:json][timeout:600];
-                (
-                    way["highway"="cycleway"](poly:"{poly_str}");
-                    way["cycleway"](poly:"{poly_str}");
-                );
-                (._;>;);
-                out body;
-                """,
-                "type": "line",
-            },
-            "buffered_bike_lanes": {
-                "query": f"""
-                [out:json][timeout:600];
-                (
-                    way["highway"="cycleway"]["cycleway"="track"](poly:"{poly_str}");
-                    way["cycleway"="track"](poly:"{poly_str}");
-                );
-                (._;>;);
-                out body;
-                """,
-                "type": "line",
-            },
-            "shared_bike_lanes": {
-                "query": f"""
-                [out:json][timeout:600];
-                (
-                    way["highway"="cycleway"]["cycleway"="shared_lane"](poly:"{poly_str}");
-                    way["cycleway"="shared_lane"](poly:"{poly_str}");
-                    way["highway"="cycleway"]["cycleway"="share_busway"](poly:"{poly_str}");
-                    way["cycleway"="share_busway"](poly:"{poly_str}");
+                    way["highway"="footway"]["footway"="sidewalk"](poly:"{poly_str}");
+                    way["highway"="path"]["path"="sidewalk"](poly:"{poly_str}");
+                    way["sidewalk"](poly:"{poly_str}");
                 );
                 (._;>;);
                 out body;

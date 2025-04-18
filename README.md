@@ -25,3 +25,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+## Usage
+
+To run the analysis, use the following command:
+
+```bash
+python fetch_county_osm_data.py
+```
