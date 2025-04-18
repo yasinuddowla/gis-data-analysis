@@ -4,6 +4,9 @@ import requests
 import time
 import os
 import json
+import re
+from collections import Counter
+from scipy.cluster.hierarchy import fclusterdata
 from shapely.geometry import Point, LineString, Polygon
 from pathlib import Path
 
@@ -162,6 +165,94 @@ def create_area_gdf_from_elements(elements):
     return gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
 
 
+def create_intersection_gdf_from_elements(elements):
+    """
+    Create a GeoDataFrame with Point geometries for intersections
+    """
+    # Filter for ways only
+    ways = [item for item in elements if item.get("type") == "way"]
+    initial_ways_count = len(ways)
+
+    # Filter for highways with maxspeed tags
+    highways_with_speed = [
+        item
+        for item in ways
+        if "tags" in item
+        and isinstance(item["tags"], dict)
+        and "maxspeed" in item["tags"]
+    ]
+    # Extract node ID and name pairs
+    node_pairs = []
+    for highway in highways_with_speed:
+        nodes = highway["nodes"]
+        names = [highway["tags"].get("name", None) for _ in nodes]
+        node_pairs.extend(zip(nodes, names))
+
+    # Remove duplicates
+    unique_node_pairs = list(set(node_pairs))
+    unique_nodes_count = len(unique_node_pairs)
+
+    # Find duplicate nodes
+    node_ids = [pair[0] for pair in unique_node_pairs]
+    counts = Counter(node_ids)
+    duplicate_nodes = [node_id for node_id, count in counts.items() if count > 1]
+    duplicate_nodes_count = len(duplicate_nodes)
+
+    # Create node query string
+    node_query = "\n".join([f"node({node_id});" for node_id in duplicate_nodes])
+
+    # Extract node IDs from query
+    node_ids = [int(num) for num in re.findall(r"\((\d+)\)", node_query)]
+
+    # Create DataFrames
+    nodes_df = pd.DataFrame(node_ids, columns=["node_id"])
+    elements_df = pd.DataFrame(elements)
+
+    # Ensure consistent data types for merging
+    nodes_df["node_id"] = nodes_df["node_id"].astype("int64")
+    elements_df["id"] = elements_df["id"].astype("int64")
+
+    # Merge to get coordinates
+    coordinates_df = pd.merge(
+        nodes_df, elements_df, left_on="node_id", right_on="id", how="left"
+    )
+
+    # Select only required columns
+    coordinates_df = coordinates_df[["node_id", "lat", "lon"]]
+
+    # Create GeoDataFrame with points
+    gdf = gpd.GeoDataFrame(
+        coordinates_df,
+        geometry=gpd.points_from_xy(coordinates_df.lon, coordinates_df.lat),
+    )
+
+    # Set initial CRS to WGS84
+    gdf.set_crs(epsg=4326, inplace=True)
+
+    # Convert to UTM for accurate distance calculations (Milwaukee)
+    gdf = gdf.to_crs(epsg=32616)  # UTM Zone 16N appropriate for Milwaukee
+
+    # Extract coordinates for clustering
+    coords = [(point.x, point.y) for point in gdf.geometry]
+
+    # Perform hierarchical clustering with 30-meter threshold
+    clusters = fclusterdata(coords, t=30, criterion="distance")
+
+    # Add cluster labels
+    gdf["cluster"] = clusters
+
+    # Calculate centroids for each cluster
+    centroids = gdf.dissolve(by="cluster").centroid
+
+    # Create GeoDataFrame for centroids
+    centroid_gdf = gpd.GeoDataFrame(geometry=centroids, crs=gdf.crs)
+    final_points_count = len(centroid_gdf)
+
+    # Convert back to WGS84 for output
+    centroid_gdf = centroid_gdf.to_crs(epsg=4326)
+    return centroid_gdf
+
+
 def fetch_infrastructure_feature(feature_name, query, output_dir, geometry_type):
     """
     Fetch a specific infrastructure feature and save as GeoJSON
@@ -184,17 +275,20 @@ def fetch_infrastructure_feature(feature_name, query, output_dir, geometry_type)
 
     elements = response_data["elements"]
     print(f"Received {len(elements)} elements")
-
-    # Process elements based on desired geometry type
-    if geometry_type == "point":
-        gdf = create_point_gdf_from_elements(elements)
-    elif geometry_type == "line":
-        gdf = create_line_gdf_from_elements(elements)
-    elif geometry_type == "area":
-        gdf = create_area_gdf_from_elements(elements)
+    # For intersection feature, apply the filtering function to the elements
+    if feature_name == "intersections":
+        gdf = create_intersection_gdf_from_elements(elements)
     else:
-        print(f"Invalid geometry type: {geometry_type}")
-        return None
+        # Process elements based on desired geometry type
+        if geometry_type == "point":
+            gdf = create_point_gdf_from_elements(elements)
+        elif geometry_type == "line":
+            gdf = create_line_gdf_from_elements(elements)
+        elif geometry_type == "area":
+            gdf = create_area_gdf_from_elements(elements)
+        else:
+            print(f"Invalid geometry type: {geometry_type}")
+            return None
 
     if gdf is None or gdf.empty:
         print(f"No {geometry_type} features found for {feature_name}")
