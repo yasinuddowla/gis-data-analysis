@@ -384,7 +384,7 @@ def main(tracts_file, features_dir, output_file):
                 "Length of Collector Roads": 0,
                 "Length of Local Roads": 0,
                 "Length of Bicycle Lanes": 0,
-                "Length of Bike Trails": 0,
+                "Length of Bicycle Paths": 0,
                 "Length of Pedestrian Crosswalks": 0,
                 "Length of Sidewalks": 0,
             }
@@ -442,7 +442,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         "Length of Collector Roads": 0,
         "Length of Local Roads": 0,
         "Length of Bicycle Lanes": 0,
-        "Length of Bike Trails": 0,
+        "Length of Bicycle Paths": 0,
         "Length of Pedestrian Crosswalks": 0,
         "Length of Sidewalks": 0,
     }
@@ -509,13 +509,9 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
             infrastructure["bicycle_lanes"], tract_gdf
         )
 
-    if "bicycle_paths" in infrastructure and "bike_trails" not in infrastructure:
-        metrics["Length of Bike Trails"] = calculate_length_within_polygon(
+    if "bicycle_paths" in infrastructure:
+        metrics["Length of Bicycle Paths"] = calculate_length_within_polygon(
             infrastructure["bicycle_paths"], tract_gdf
-        )
-    elif "bike_trails" in infrastructure:
-        metrics["Length of Bike Trails"] = calculate_length_within_polygon(
-            infrastructure["bike_trails"], tract_gdf
         )
 
     # Calculate length of pedestrian crosswalks
