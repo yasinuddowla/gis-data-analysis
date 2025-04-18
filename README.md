@@ -28,6 +28,12 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Extract Census Tract Data
+
+```bash
+python extract_county_tracts.py
+```
+
 ### Fetching OSM Data
 
 ```bash
