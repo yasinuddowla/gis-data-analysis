@@ -368,6 +368,8 @@ def main(tracts_file, features_dir, output_file):
             default_metrics = {
                 "Census Tract": tract["tract_id"],
                 "GEOID": tract["GEOID"] if "GEOID" in tract else None,
+                "Center_X": tract.geometry.centroid.x if tract.geometry else None,
+                "Center_Y": tract.geometry.centroid.y if tract.geometry else None,
                 "Tract Area (km^2)": (
                     tract["tract_area_km2"] if "tract_area_km2" in tract else 0
                 ),
@@ -385,9 +387,6 @@ def main(tracts_file, features_dir, output_file):
                 "Length of Bike Trails": 0,
                 "Length of Pedestrian Crosswalks": 0,
                 "Length of Sidewalks": 0,
-                "Length of Bike Lanes": 0,
-                "Length of Buffered Bike Lanes": 0,
-                "Length of Shared Bike Lanes": 0,
             }
             results.append(default_metrics)
 
@@ -429,6 +428,8 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
     metrics = {
         "Census Tract": tract_id,
         "GEOID": tract_row["GEOID"],
+        "Center_X": tract_row.geometry.centroid.x,
+        "Center_Y": tract_row.geometry.centroid.y,
         "Tract Area (km^2)": tract_area_km2,
         "Total Intersections": 0,
         "Intersection Density": 0,
@@ -444,9 +445,6 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         "Length of Bike Trails": 0,
         "Length of Pedestrian Crosswalks": 0,
         "Length of Sidewalks": 0,
-        "Length of Bike Lanes": 0,
-        "Length of Buffered Bike Lanes": 0,
-        "Length of Shared Bike Lanes": 0,
     }
 
     # Calculate point densities
@@ -530,19 +528,6 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
     if "sidewalks" in infrastructure:
         metrics["Length of Sidewalks"] = calculate_length_within_polygon(
             infrastructure["sidewalks"], tract_gdf
-        )
-    # add bike_lane, buffered_bike_lanes, shared_bike_lanes
-    if "bike_lanes" in infrastructure:
-        metrics["Length of Bike Lanes"] = calculate_length_within_polygon(
-            infrastructure["bike_lanes"], tract_gdf
-        )
-    if "buffered_bike_lanes" in infrastructure:
-        metrics["Length of Buffered Bike Lanes"] = calculate_length_within_polygon(
-            infrastructure["buffered_bike_lanes"], tract_gdf
-        )
-    if "shared_bike_lanes" in infrastructure:
-        metrics["Length of Shared Bike Lanes"] = calculate_length_within_polygon(
-            infrastructure["shared_bike_lanes"], tract_gdf
         )
     return metrics
 
