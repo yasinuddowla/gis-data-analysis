@@ -28,8 +28,20 @@ pip install -r requirements.txt
 
 ## Usage
 
-To run the analysis, use the following command:
+### Fetching OSM Data
 
 ```bash
 python fetch_county_osm_data.py
+```
+
+### Calculating Metrics
+
+```bash
+python calculate_tract_metrics.py
+```
+
+### Accident Analysis
+
+```bash
+python accident_data_analysis.py
 ```
