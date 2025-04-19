@@ -7,10 +7,8 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 df = pd.read_csv(r'data/county_079/census_tract_metrics_with_accidents.csv')
 
 # Select dependent and independent variables
-target= df['Pedestrian_Accidents']
-predictors = df[['Intersection Density', 'Bus-Stop Density', 'Parking-Lot/Space Density', 'Length of Sidewalks', 'Length of Bicycle Lanes']]
-
-
+target = 'Pedestrian_Accidents'
+predictors = ['Intersection Density', 'Bus-Stop Density', 'Parking-Lot/Space Density', 'Length of Sidewalks', 'Length of Bicycle Lanes']
 
 # Define X and y
 X = df[predictors]
