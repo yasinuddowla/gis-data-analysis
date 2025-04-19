@@ -195,29 +195,46 @@ def calculate_length_within_polygon(lines_gdf, polygon_gdf):
         if lines_gdf.crs != polygon_gdf.crs:
             lines_gdf = lines_gdf.to_crs(polygon_gdf.crs)
 
-        # Clip lines to the polygon
-        clipped_lines = gpd.clip(lines_gdf, polygon_gdf)
+        # Get the polygon geometry
+        polygon = polygon_gdf.geometry.iloc[0]
+        
+        # Create a new GeoDataFrame with only the lines that intersect the polygon
+        # This is more efficient than clipping everything
+        intersecting_lines = lines_gdf[lines_gdf.geometry.intersects(polygon)]
+        
+        if intersecting_lines.empty:
+            return 0
+            
+        # Clip the intersecting lines to the polygon boundary
+        clipped_lines = gpd.clip(intersecting_lines, polygon_gdf)
 
         if clipped_lines.empty:
             return 0
 
-        # Calculate total length in km
-        # Determine which Wisconsin projection to use based on location
+        # Get the centroid of the polygon for UTM zone determination
         centroid = polygon_gdf.geometry.union_all().centroid
+        lon = centroid.x
         lat = centroid.y
-
-        # Select appropriate Wisconsin State Plane projection based on latitude
-        if lat > 45.5:
-            projection_epsg = 2289  # Wisconsin North
-        elif lat > 44.25:
-            projection_epsg = 2286  # Wisconsin Central
+        
+        # Determine appropriate UTM zone based on longitude
+        utm_zone = int((lon + 180) / 6) + 1
+        
+        # For northern hemisphere (positive latitude)
+        if lat > 0:
+            utm_epsg = 26900 + utm_zone  # EPSG for UTM zones in NAD83 for northern hemisphere
         else:
-            projection_epsg = 2285  # Wisconsin South
-
-        # Project to the selected coordinate system for accurate measurements
-        clipped_lines_projected = clipped_lines.to_crs(epsg=projection_epsg)
+            utm_epsg = 32700 + utm_zone  # EPSG for UTM zones in WGS84 for southern hemisphere
+            
+        # Project to UTM for accurate distance measurements
+        clipped_lines_projected = clipped_lines.to_crs(epsg=utm_epsg)
+        
+        # Calculate total length in km (convert from meters)
         total_length_km = clipped_lines_projected.geometry.length.sum() / 1000
-
+        
+        # Debug output for Milwaukee County GEOID 55079160102 which had issues
+        if polygon_gdf.iloc[0].get('GEOID') == '55079160102' and 'highway' in clipped_lines.columns and any(clipped_lines['highway'].str.contains('motorway', na=False)):
+            print(f"Interstate length for tract 160102: {total_length_km:.4f} km (Using UTM zone {utm_zone})")
+            
         return total_length_km
     except Exception as e:
         print(f"Error calculating length: {str(e)}")
