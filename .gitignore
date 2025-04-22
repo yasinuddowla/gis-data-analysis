@@ -38,6 +38,7 @@ venv.bak/
 *.swo
 
 # Data files
+analysis_outputs/
 data/osm_features/
 data/county_*
 data/morans_i/
