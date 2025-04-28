@@ -197,14 +197,14 @@ def calculate_length_within_polygon(lines_gdf, polygon_gdf):
 
         # Get the polygon geometry
         polygon = polygon_gdf.geometry.iloc[0]
-        
+
         # Create a new GeoDataFrame with only the lines that intersect the polygon
         # This is more efficient than clipping everything
         intersecting_lines = lines_gdf[lines_gdf.geometry.intersects(polygon)]
-        
+
         if intersecting_lines.empty:
             return 0
-            
+
         # Clip the intersecting lines to the polygon boundary
         clipped_lines = gpd.clip(intersecting_lines, polygon_gdf)
 
@@ -215,26 +215,36 @@ def calculate_length_within_polygon(lines_gdf, polygon_gdf):
         centroid = polygon_gdf.geometry.union_all().centroid
         lon = centroid.x
         lat = centroid.y
-        
+
         # Determine appropriate UTM zone based on longitude
         utm_zone = int((lon + 180) / 6) + 1
-        
+
         # For northern hemisphere (positive latitude)
         if lat > 0:
-            utm_epsg = 26900 + utm_zone  # EPSG for UTM zones in NAD83 for northern hemisphere
+            utm_epsg = (
+                26900 + utm_zone
+            )  # EPSG for UTM zones in NAD83 for northern hemisphere
         else:
-            utm_epsg = 32700 + utm_zone  # EPSG for UTM zones in WGS84 for southern hemisphere
-            
+            utm_epsg = (
+                32700 + utm_zone
+            )  # EPSG for UTM zones in WGS84 for southern hemisphere
+
         # Project to UTM for accurate distance measurements
         clipped_lines_projected = clipped_lines.to_crs(epsg=utm_epsg)
-        
+
         # Calculate total length in km (convert from meters)
         total_length_km = clipped_lines_projected.geometry.length.sum() / 1000
-        
+
         # Debug output for Milwaukee County GEOID 55079160102 which had issues
-        if polygon_gdf.iloc[0].get('GEOID') == '55079160102' and 'highway' in clipped_lines.columns and any(clipped_lines['highway'].str.contains('motorway', na=False)):
-            print(f"Interstate length for tract 160102: {total_length_km:.4f} km (Using UTM zone {utm_zone})")
-            
+        if (
+            polygon_gdf.iloc[0].get("GEOID") == "55079160102"
+            and "highway" in clipped_lines.columns
+            and any(clipped_lines["highway"].str.contains("motorway", na=False))
+        ):
+            print(
+                f"Interstate length for tract 160102: {total_length_km:.4f} km (Using UTM zone {utm_zone})"
+            )
+
         return total_length_km
     except Exception as e:
         print(f"Error calculating length: {str(e)}")
@@ -373,7 +383,7 @@ def main(tracts_file, features_dir, output_file):
 
     for idx, tract in tracts.iterrows():
         try:
-            if idx % 10 == 0 or idx == total_tracts - 1:
+            if idx % 50 == 0 or idx == total_tracts - 1:
                 print(f"Processing tract {idx+1}/{total_tracts}: {tract['tract_id']}")
 
             # Pass a reference to the full tracts GeoDataFrame
@@ -395,6 +405,7 @@ def main(tracts_file, features_dir, output_file):
                 "Total Bus Stops": 0,
                 "Bus-Stop Density": 0,
                 "Total Parking Lots": 0,
+                "Parking-Lot Area (km^2)": 0,
                 "Parking-Lot/Space Density": 0,
                 "Length of Interstate Highway": 0,
                 "Length of State Highway": 0,
@@ -453,6 +464,7 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         "Total Bus Stops": 0,
         "Bus-Stop Density": 0,
         "Total Parking Lots": 0,
+        "Parking-Lot Area (km^2)": 0,
         "Parking-Lot/Space Density": 0,
         "Length of Interstate Highway": 0,
         "Length of State Highway": 0,
@@ -482,16 +494,16 @@ def calculate_tract_metrics(tract_row, tracts, infrastructure):
         metrics["Bus-Stop Density"] = calculate_density(bus_stop_count, tract_area_km2)
 
     if "parking_lots" in infrastructure:
-        # For parking lots, calculate the area and use it for density
-        parking_area_km2 = calculate_area_within_polygon(
-            infrastructure["parking_lots"], tract_gdf
-        )
 
         # Make sure CRS matches before clipping
         parking_lots_gdf = infrastructure["parking_lots"]
         if parking_lots_gdf.crs != tract_gdf.crs:
             parking_lots_gdf = parking_lots_gdf.to_crs(tract_gdf.crs)
-
+        # For parking lots, calculate the area and use it for density
+        parking_area_km2 = calculate_area_within_polygon(
+            infrastructure["parking_lots"], tract_gdf
+        )
+        metrics["Parking-Lot Area (km^2)"] = parking_area_km2
         # Count the number of parking lot features
         parking_lot_count = len(gpd.clip(parking_lots_gdf, tract_gdf))
         metrics["Total Parking Lots"] = parking_lot_count  # Store the total count
