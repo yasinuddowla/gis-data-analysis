@@ -101,28 +101,6 @@ def load_census_tracts(geojson_file):
             total_area = tracts["tract_area_km2"].sum()
             print(f"Total calculated area: {total_area:.2f} km²")
 
-            # Check for potentially duplicate or overlapping census tracts
-            unique_tracts = len(tracts["tract_id"].unique())
-            if unique_tracts < len(tracts):
-                print(
-                    f"WARNING: Found {len(tracts) - unique_tracts} duplicate tract IDs!"
-                )
-
-                # Remove duplicates to avoid double-counting area
-                tracts = tracts.drop_duplicates(subset=["tract_id"])
-                new_total_area = tracts["tract_area_km2"].sum()
-                print(f"Total area after removing duplicates: {new_total_area:.2f} km²")
-
-            # Validate against known area of Milwaukee County (~3,082 km²)
-            official_area = 3082  # km²
-            if (
-                abs(total_area - official_area) > official_area * 0.1
-            ):  # If more than 10% off
-                print(
-                    f"WARNING: Calculated area ({total_area:.2f} km²) differs significantly from "
-                    f"the official area ({official_area:.2f} km²). Check for overlapping tracts "
-                    f"or projection issues."
-                )
         else:
             # If already in a projected CRS, calculate directly
             print(f"Using existing projected CRS: {tracts.crs}")
@@ -211,39 +189,12 @@ def calculate_length_within_polygon(lines_gdf, polygon_gdf):
         if clipped_lines.empty:
             return 0
 
-        # Get the centroid of the polygon for UTM zone determination
-        centroid = polygon_gdf.geometry.union_all().centroid
-        lon = centroid.x
-        lat = centroid.y
-
-        # Determine appropriate UTM zone based on longitude
-        utm_zone = int((lon + 180) / 6) + 1
-
-        # For northern hemisphere (positive latitude)
-        if lat > 0:
-            utm_epsg = (
-                26900 + utm_zone
-            )  # EPSG for UTM zones in NAD83 for northern hemisphere
-        else:
-            utm_epsg = (
-                32700 + utm_zone
-            )  # EPSG for UTM zones in WGS84 for southern hemisphere
-
+        projection_epsg = 3071
         # Project to UTM for accurate distance measurements
-        clipped_lines_projected = clipped_lines.to_crs(epsg=utm_epsg)
+        clipped_lines_projected = clipped_lines.to_crs(projection_epsg)
 
         # Calculate total length in km (convert from meters)
         total_length_km = clipped_lines_projected.geometry.length.sum() / 1000
-
-        # Debug output for Milwaukee County GEOID 55079160102 which had issues
-        if (
-            polygon_gdf.iloc[0].get("GEOID") == "55079160102"
-            and "highway" in clipped_lines.columns
-            and any(clipped_lines["highway"].str.contains("motorway", na=False))
-        ):
-            print(
-                f"Interstate length for tract 160102: {total_length_km:.4f} km (Using UTM zone {utm_zone})"
-            )
 
         return total_length_km
     except Exception as e:
@@ -277,19 +228,11 @@ def calculate_area_within_polygon(areas_gdf, polygon_gdf):
             return 0
 
         # Calculate total area in km²
-        # Determine which Wisconsin projection to use based on location
-        centroid = polygon_gdf.geometry.union_all().centroid
-        lat = centroid.y
+        # For Milwaukee County, use Wisconsin South State Plane (EPSG:3071)
+        # This is the Wisconsin Coordinate Reference System which is optimal for the entire state
+        projection_epsg = 3071  # Wisconsin Coordinate System (meters)
 
-        # Select appropriate Wisconsin State Plane projection based on latitude
-        if lat > 45.5:
-            projection_epsg = 2289  # Wisconsin North
-        elif lat > 44.25:
-            projection_epsg = 2286  # Wisconsin Central
-        else:
-            projection_epsg = 2285  # Wisconsin South
-
-        # Project to the selected coordinate system for accurate measurements
+        # Project to the Wisconsin Coordinate System for accurate measurements
         clipped_areas_projected = clipped_areas.to_crs(epsg=projection_epsg)
         total_area_km2 = clipped_areas_projected.geometry.area.sum() / 1_000_000
 
